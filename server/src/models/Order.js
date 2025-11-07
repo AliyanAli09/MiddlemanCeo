@@ -72,7 +72,7 @@ const orderSchema = new mongoose.Schema({
   paymentStatus: {
     type: String,
     required: true,
-    enum: ['pending', 'paid', 'failed', 'refunded'],
+    enum: ['pending', 'partially_paid', 'paid', 'failed', 'refunded'],
     default: 'pending',
   },
   
@@ -100,12 +100,38 @@ const orderSchema = new mongoose.Schema({
   secondPaymentAmount: {
     type: Number,
   },
+  secondPaymentDueDate: {
+    type: Date,
+  },
   secondPaymentDate: {
     type: Date,
   },
   secondPaymentStatus: {
     type: String,
-    enum: ['pending', 'paid', 'failed'],
+    enum: ['pending', 'paid', 'failed', 'overdue'],
+    default: 'pending',
+  },
+  secondPaymentIntentId: {
+    type: String,
+  },
+  
+  // Auto-charge for split payments
+  savedPaymentMethodId: {
+    type: String, // Stripe payment method ID for auto-charging
+  },
+  secondPaymentScheduled: {
+    type: Boolean,
+    default: false,
+  },
+  secondPaymentScheduledDate: {
+    type: Date,
+  },
+  secondPaymentError: {
+    type: String, // Store error message if auto-charge fails
+  },
+  secondPaymentRetryCount: {
+    type: Number,
+    default: 0,
   },
   
   // Tutorial Access
@@ -115,6 +141,12 @@ const orderSchema = new mongoose.Schema({
   },
   tutorialAccessUrl: {
     type: String,
+  },
+  
+  // Email tracking
+  emailsSent: {
+    type: Boolean,
+    default: false,
   },
   
   // Skool Community
@@ -140,6 +172,8 @@ orderSchema.index({ customerId: 1 });
 orderSchema.index({ paymentStatus: 1 });
 orderSchema.index({ createdAt: -1 });
 orderSchema.index({ customerEmail: 1 });
+orderSchema.index({ secondPaymentDueDate: 1 });
+orderSchema.index({ 'secondPaymentStatus': 1, 'secondPaymentDueDate': 1 });
 
 const Order = mongoose.model('Order', orderSchema);
 

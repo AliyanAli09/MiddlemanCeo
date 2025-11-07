@@ -12,6 +12,7 @@ import morgan from 'morgan';
 import leadRoutes from './routes/leads.js';
 import orderRoutes from './routes/orders.js';
 import paymentRoutes from './routes/payments.js';
+import startPaymentCronJob from './jobs/paymentJob.js';
 
 // Initialize express app
 const app = express();
@@ -101,7 +102,9 @@ const startServer = async () => {
   });
 };
 
+
 startServer();
+startPaymentCronJob();
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {

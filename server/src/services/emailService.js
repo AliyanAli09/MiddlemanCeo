@@ -7,23 +7,31 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 /**
  * Email Service
  * Handles all email sending functionality
- * Updated with spam prevention improvements
+ * Updated with spam prevention improvements and split payment emails
  */
 
 // Send confirmation email to customer
 export const sendCustomerConfirmation = async (orderData, leadData) => {
-  const { orderId, programName, amount, paymentPlan } = orderData;
+  const { orderId, programName, amount, paymentPlan, secondPaymentDueDate } = orderData;
   const { name, email } = leadData;
+
+  // Format second payment date if available
+  const formattedSecondPaymentDate = secondPaymentDueDate 
+    ? new Date(secondPaymentDueDate).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })
+    : null;
 
   const msg = {
     to: email,
     from: {
       email: process.env.EMAIL_FROM,
-      name: "MiddlemanCEO Team", // Add sender name
+      name: "MiddlemanCEO Team",
     },
-    replyTo: process.env.ADMIN_EMAIL, // Add reply-to
+    replyTo: process.env.ADMIN_EMAIL,
     subject: `Welcome to MiddlemanCEO! 🎉 Order #${orderId}`,
-    // Add plain text version (IMPORTANT for spam filters)
     text: `
 Congratulations, ${name}!
 
@@ -36,7 +44,7 @@ ORDER DETAILS
 Order Number: #${orderId}
 Program: ${programName}
 Amount Paid: $${amount}
-${paymentPlan === "split" ? `Next Payment: $${amount} (Due in 30 days)` : ""}
+${paymentPlan === "split" ? `\nNext Payment: $${amount}\nDue Date: ${formattedSecondPaymentDate}\n(Will be automatically charged to your saved payment method)` : ""}
 
 WHAT'S NEXT?
 ------------
@@ -45,6 +53,8 @@ WHAT'S NEXT?
 ✓ Start building your business!
 
 Click here to access your materials: ${process.env.FRONTEND_URL}/tutorial
+
+${paymentPlan === "split" ? `\nIMPORTANT: Your payment method has been saved securely. The second payment of $${amount} will be automatically charged on ${formattedSecondPaymentDate}.\n` : ""}
 
 Need help?
 Contact us at support@middlemanceo.com
@@ -70,6 +80,7 @@ Terms of Service: ${process.env.FRONTEND_URL}/terms
           .button { display: inline-block; background: #2563eb; color: white !important; padding: 15px 30px; text-decoration: none; border-radius: 8px; margin: 20px 0; }
           .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }
           .checkmark { color: #10b981; font-size: 20px; }
+          .alert-box { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px; }
           a { color: #2563eb; }
         </style>
       </head>
@@ -103,12 +114,29 @@ Terms of Service: ${process.env.FRONTEND_URL}/terms
                   ? `
               <div class="detail-row">
                 <span><strong>Next Payment:</strong></span>
-                <span>$${amount} (Due in 30 days)</span>
+                <span>$${amount}</span>
+              </div>
+              <div class="detail-row">
+                <span><strong>Due Date:</strong></span>
+                <span>${formattedSecondPaymentDate}</span>
               </div>
               `
                   : ""
               }
             </div>
+
+            ${
+              paymentPlan === "split"
+                ? `
+            <div class="alert-box">
+              <p style="margin: 0; color: #92400e;">
+                <strong>⚠️ Auto-Payment Scheduled:</strong><br>
+                Your payment method has been saved securely. The second payment of <strong>$${amount}</strong> will be automatically charged on <strong>${formattedSecondPaymentDate}</strong>.
+              </p>
+            </div>
+            `
+                : ""
+            }
             
             <h3>What's Next?</h3>
             <ul style="line-height: 2;">
@@ -132,25 +160,19 @@ Terms of Service: ${process.env.FRONTEND_URL}/terms
           <div class="footer">
             <p>&copy; ${new Date().getFullYear()} MiddlemanCEO. All rights reserved.</p>
             <p>
-              <a href="${
-                process.env.FRONTEND_URL
-              }/privacy" style="color: #2563eb; text-decoration: none;">Privacy Policy</a> | 
-              <a href="${
-                process.env.FRONTEND_URL
-              }/terms" style="color: #2563eb; text-decoration: none;">Terms of Service</a>
+              <a href="${process.env.FRONTEND_URL}/privacy" style="color: #2563eb; text-decoration: none;">Privacy Policy</a> | 
+              <a href="${process.env.FRONTEND_URL}/terms" style="color: #2563eb; text-decoration: none;">Terms of Service</a>
             </p>
           </div>
         </div>
       </body>
       </html>
     `,
-    // Anti-spam headers
     headers: {
       "X-Priority": "3",
       "X-MSMail-Priority": "Normal",
       Importance: "Normal",
     },
-    // Disable tracking (improves deliverability)
     trackingSettings: {
       clickTracking: {
         enable: false,
@@ -159,14 +181,12 @@ Terms of Service: ${process.env.FRONTEND_URL}/terms
         enable: false,
       },
     },
-    // Email categories for better organization
     categories: ["order-confirmation", "customer-email"],
   };
 
   try {
     const response = await sgMail.send(msg);
 
-    // Log email
     await EmailLog.create({
       orderId,
       recipient: email,
@@ -182,7 +202,6 @@ Terms of Service: ${process.env.FRONTEND_URL}/terms
   } catch (error) {
     console.error("❌ Error sending confirmation email:", error);
 
-    // Log failed email
     await EmailLog.create({
       orderId,
       recipient: email,
@@ -199,7 +218,7 @@ Terms of Service: ${process.env.FRONTEND_URL}/terms
 
 // Send notification email to admin
 export const sendAdminNotification = async (orderData, leadData) => {
-  const { orderId, programName, amount, industry, city } = orderData;
+  const { orderId, programName, amount, industry, city, paymentPlan } = orderData;
   const { name, email, phone } = leadData;
 
   const msg = {
@@ -208,9 +227,8 @@ export const sendAdminNotification = async (orderData, leadData) => {
       email: process.env.EMAIL_FROM,
       name: "MiddlemanCEO System",
     },
-    replyTo: email, // Reply goes to customer
+    replyTo: email,
     subject: `New Order: ${programName} - ${name}`,
-    // Plain text version
     text: `
 NEW ORDER RECEIVED!
 
@@ -219,6 +237,7 @@ ORDER DETAILS
 Order ID: #${orderId}
 Program: ${programName}
 Amount: $${amount}
+Payment Plan: ${paymentPlan === 'split' ? 'Split (2 payments)' : 'One-time'}
 
 CUSTOMER INFORMATION
 --------------------
@@ -236,6 +255,7 @@ ACTION ITEMS
 - Grant tutorial access
 - Follow up if needed
 - Review customer details
+${paymentPlan === 'split' ? '- Monitor second payment in 30 days' : ''}
 
 This is an automated notification from MiddlemanCEO.com
     `,
@@ -267,6 +287,7 @@ This is an automated notification from MiddlemanCEO.com
               <p><span class="label">Order ID:</span> <span class="value">#${orderId}</span></p>
               <p><span class="label">Program:</span> <span class="value">${programName}</span></p>
               <p><span class="label">Amount:</span> <span class="value" style="color: #10b981; font-weight: bold;">$${amount}</span></p>
+              <p><span class="label">Payment Plan:</span> <span class="value">${paymentPlan === 'split' ? 'Split (2 payments)' : 'One-time'}</span></p>
             </div>
             
             <h2>Customer Information</h2>
@@ -287,6 +308,7 @@ This is an automated notification from MiddlemanCEO.com
               <li>Grant tutorial access to <a href="mailto:${email}">${email}</a></li>
               <li>Follow up if needed</li>
               <li>Review customer details</li>
+              ${paymentPlan === 'split' ? '<li><strong>Monitor second payment in 30 days (auto-charge)</strong></li>' : ''}
             </ul>
             
             <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 14px;">
@@ -316,7 +338,6 @@ This is an automated notification from MiddlemanCEO.com
   try {
     const response = await sgMail.send(msg);
 
-    // Log email
     await EmailLog.create({
       orderId,
       recipient: process.env.ADMIN_EMAIL,
@@ -332,7 +353,6 @@ This is an automated notification from MiddlemanCEO.com
   } catch (error) {
     console.error("❌ Error sending admin notification:", error);
 
-    // Log failed email
     await EmailLog.create({
       orderId,
       recipient: process.env.ADMIN_EMAIL,
@@ -347,7 +367,220 @@ This is an automated notification from MiddlemanCEO.com
   }
 };
 
+/**
+ * Send Second Payment Confirmation
+ */
+export const sendSecondPaymentConfirmation = async (orderData, leadData) => {
+  const { orderId, programName, amount } = orderData;
+  const { name, email } = leadData;
+
+  const msg = {
+    to: email,
+    from: {
+      email: process.env.EMAIL_FROM,
+      name: 'MiddlemanCEO Team',
+    },
+    replyTo: process.env.ADMIN_EMAIL,
+    subject: `Second Payment Received - Order #${orderId} ✅`,
+    text: `
+Hi ${name},
+
+Great news! Your second payment has been successfully processed.
+
+PAYMENT DETAILS
+---------------
+Order Number: #${orderId}
+Program: ${programName}
+Amount Charged: $${amount}
+Status: PAID IN FULL
+
+Your ${programName} is now fully paid and you have complete access to all materials.
+
+Continue your learning at: ${process.env.FRONTEND_URL}/tutorial
+
+Thank you for your business!
+MiddlemanCEO Team
+
+Questions? Contact us at support@middlemanceo.com
+    `,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #10b981; color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+          .content { background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; }
+          .success-box { background: #d1fae5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; }
+          .button { display: inline-block; background: #2563eb; color: white !important; padding: 15px 30px; text-decoration: none; border-radius: 8px; margin: 20px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>✅ Payment Successful!</h1>
+          </div>
+          
+          <div class="content">
+            <p>Hi ${name},</p>
+            
+            <div class="success-box">
+              <p style="margin: 0; color: #065f46;">
+                <strong>Great news!</strong> Your second payment has been successfully processed.
+              </p>
+            </div>
+            
+            <h3>Payment Details</h3>
+            <ul>
+              <li><strong>Order Number:</strong> #${orderId}</li>
+              <li><strong>Program:</strong> ${programName}</li>
+              <li><strong>Amount Charged:</strong> $${amount}</li>
+              <li><strong>Status:</strong> <span style="color: #10b981; font-weight: bold;">PAID IN FULL</span></li>
+            </ul>
+            
+            <p>Your ${programName} is now fully paid and you have complete access to all materials.</p>
+            
+            <div style="text-align: center;">
+              <a href="${process.env.FRONTEND_URL}/tutorial" class="button">
+                CONTINUE LEARNING
+              </a>
+            </div>
+            
+            <p style="margin-top: 30px;">
+              Thank you for your business!<br>
+              <strong>MiddlemanCEO Team</strong>
+            </p>
+            
+            <p style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 14px; color: #6b7280;">
+              Questions? Contact us at <a href="mailto:support@middlemanceo.com">support@middlemanceo.com</a>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    categories: ['second-payment', 'payment-confirmation'],
+  };
+
+  try {
+    await sgMail.send(msg);
+    console.log(`✅ Second payment confirmation sent to ${email}`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error sending second payment confirmation:', error);
+    throw error;
+  }
+};
+
+/**
+ * Send Second Payment Failed Email
+ */
+export const sendSecondPaymentFailed = async (orderData, leadData) => {
+  const { orderId, programName, amount, errorMessage } = orderData;
+  const { name, email } = leadData;
+
+  const msg = {
+    to: email,
+    from: {
+      email: process.env.EMAIL_FROM,
+      name: 'MiddlemanCEO Team',
+    },
+    replyTo: process.env.ADMIN_EMAIL,
+    subject: `Payment Failed - Action Required - Order #${orderId} ⚠️`,
+    text: `
+Hi ${name},
+
+We attempted to process your second payment but it failed.
+
+PAYMENT DETAILS
+---------------
+Order Number: #${orderId}
+Program: ${programName}
+Amount Due: $${amount}
+Reason: ${errorMessage}
+
+ACTION REQUIRED
+---------------
+Please contact us immediately at support@middlemanceo.com to update your payment method.
+
+We'll be happy to help you complete your payment and ensure continued access to your materials.
+
+Thank you,
+MiddlemanCEO Team
+    `,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #dc2626; color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+          .content { background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; }
+          .error-box { background: #fee2e2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0; }
+          .button { display: inline-block; background: #2563eb; color: white !important; padding: 15px 30px; text-decoration: none; border-radius: 8px; margin: 20px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>⚠️ Payment Failed</h1>
+          </div>
+          
+          <div class="content">
+            <p>Hi ${name},</p>
+            
+            <div class="error-box">
+              <p style="margin: 0; color: #991b1b;">
+                <strong>We attempted to process your second payment but it failed.</strong>
+              </p>
+            </div>
+            
+            <h3>Payment Details</h3>
+            <ul>
+              <li><strong>Order Number:</strong> #${orderId}</li>
+              <li><strong>Program:</strong> ${programName}</li>
+              <li><strong>Amount Due:</strong> $${amount}</li>
+              <li><strong>Reason:</strong> ${errorMessage}</li>
+            </ul>
+            
+            <h3>Action Required</h3>
+            <p>Please contact us immediately to update your payment method and complete your payment.</p>
+            
+            <div style="text-align: center;">
+              <a href="mailto:support@middlemanceo.com" class="button">
+                CONTACT SUPPORT
+              </a>
+            </div>
+            
+            <p style="margin-top: 30px;">
+              We're here to help you resolve this quickly.<br>
+              <strong>MiddlemanCEO Team</strong>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    categories: ['second-payment', 'payment-failed'],
+  };
+
+  try {
+    await sgMail.send(msg);
+    console.log(`✅ Payment failure notification sent to ${email}`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error sending payment failure notification:', error);
+    throw error;
+  }
+};
+
 export default {
   sendCustomerConfirmation,
   sendAdminNotification,
+  sendSecondPaymentConfirmation,
+  sendSecondPaymentFailed,
 };

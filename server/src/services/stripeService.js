@@ -3,19 +3,39 @@ import stripe from '../config/stripe.js';
 /**
  * Stripe Service
  * Handles all Stripe payment operations
+ * Updated to support auto-charge for split payments
  */
 
 // Create Payment Intent
 export const createPaymentIntent = async (amount, currency = 'usd', metadata = {}) => {
   try {
-    const paymentIntent = await stripe.paymentIntents.create({
+    const paymentIntentData = {
       amount: Math.round(amount * 100), // Convert to cents
       currency: currency.toLowerCase(),
       automatic_payment_methods: {
         enabled: true,
       },
       metadata,
-    });
+    };
+
+    // Add customer if provided
+    if (metadata.customerId) {
+      paymentIntentData.customer = metadata.customerId;
+      delete metadata.customerId; // Remove from metadata after using
+    }
+
+    // Add setup_future_usage if specified (for saving payment method)
+    if (metadata.setupFutureUsage) {
+      paymentIntentData.setup_future_usage = metadata.setupFutureUsage;
+      delete metadata.setupFutureUsage; // Remove from metadata after using
+    }
+
+    // Add description if provided
+    if (metadata.description) {
+      paymentIntentData.description = metadata.description;
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create(paymentIntentData);
 
     return paymentIntent;
   } catch (error) {
@@ -45,6 +65,7 @@ export const createOrRetrieveCustomer = async (email, name, phone) => {
     });
 
     if (existingCustomers.data.length > 0) {
+      console.log(`✅ Found existing Stripe customer: ${existingCustomers.data[0].id}`);
       return existingCustomers.data[0];
     }
 
@@ -53,8 +74,12 @@ export const createOrRetrieveCustomer = async (email, name, phone) => {
       email,
       name,
       phone,
+      metadata: {
+        source: 'middlemanceo',
+      },
     });
 
+    console.log(`✅ Created new Stripe customer: ${customer.id}`);
     return customer;
   } catch (error) {
     console.error('Error creating/retrieving customer:', error);
@@ -78,6 +103,27 @@ export const createSubscription = async (customerId, priceId, metadata = {}) => 
   }
 };
 
+// Charge Saved Payment Method (for second payment)
+export const chargePaymentMethod = async (customerId, paymentMethodId, amount, currency, metadata = {}) => {
+  try {
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100),
+      currency: currency || 'usd',
+      customer: customerId,
+      payment_method: paymentMethodId,
+      off_session: true, // Customer is not present
+      confirm: true, // Confirm immediately
+      metadata,
+    });
+
+    console.log(`✅ Payment method charged successfully: ${paymentIntent.id}`);
+    return paymentIntent;
+  } catch (error) {
+    console.error('Error charging payment method:', error);
+    throw error;
+  }
+};
+
 // Refund Payment
 export const refundPayment = async (paymentIntentId, amount = null) => {
   try {
@@ -90,6 +136,7 @@ export const refundPayment = async (paymentIntentId, amount = null) => {
     }
 
     const refund = await stripe.refunds.create(refundData);
+    console.log(`✅ Refund processed: ${refund.id}`);
     return refund;
   } catch (error) {
     console.error('Error processing refund:', error);
@@ -112,11 +159,24 @@ export const verifyWebhookSignature = (payload, signature) => {
   }
 };
 
+// Get Payment Method Details
+export const getPaymentMethod = async (paymentMethodId) => {
+  try {
+    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+    return paymentMethod;
+  } catch (error) {
+    console.error('Error retrieving payment method:', error);
+    throw error;
+  }
+};
+
 export default {
   createPaymentIntent,
   retrievePaymentIntent,
   createOrRetrieveCustomer,
   createSubscription,
+  chargePaymentMethod,
   refundPayment,
   verifyWebhookSignature,
+  getPaymentMethod,
 };
