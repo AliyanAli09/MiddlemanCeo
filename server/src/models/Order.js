@@ -167,11 +167,7 @@ const orderSchema = new mongoose.Schema({
 });
 
 // Indexes
-orderSchema.index({ orderId: 1 });
-orderSchema.index({ customerId: 1 });
-orderSchema.index({ paymentStatus: 1 });
-orderSchema.index({ createdAt: -1 });
-orderSchema.index({ customerEmail: 1 });
+
 orderSchema.index({ secondPaymentDueDate: 1 });
 orderSchema.index({ 'secondPaymentStatus': 1, 'secondPaymentDueDate': 1 });
 
