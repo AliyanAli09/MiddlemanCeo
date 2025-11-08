@@ -2,15 +2,15 @@ export const PROGRAMS = [
   {
     id: 'basic',
     name: 'Basic Plan',
-    price: 97,
-    priceDisplay: '$97',
+    price: 197,
+    priceDisplay: '$197',
     paymentType: 'one-time',
     paymentOptions: [
       {
         type: 'one-time',
         label: 'One-time payment',
-        amount: 97,
-        display: '$97',
+        amount: 197,
+        display: '$197',
       },
     ],
     features: [

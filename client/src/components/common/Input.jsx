@@ -32,8 +32,8 @@ const Input = React.forwardRef(({
         placeholder={placeholder}
         disabled={disabled}
         className={cn(
-          'w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-gray-900 placeholder-gray-400',
-          error ? 'border-red-500 focus:ring-red-500' : 'border-gray-300',
+          'w-full px-4 py-3 border  rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-gray-900 placeholder-gray-400',
+          error ? 'border-red-500 focus:ring-red-500' : 'border-black-300',
           disabled && 'bg-gray-100 cursor-not-allowed opacity-60',
           className
         )}
