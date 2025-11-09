@@ -1,13 +1,16 @@
 import sgMail from "@sendgrid/mail";
 import EmailLog from "../models/EmailLog.js";
+import dotenv from "dotenv";
+dotenv.config();
 
 // Initialize SendGrid
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+sgMail.setApiKey(process.env.SENDGRID_API_KEY );
+
 
 /**
  * Email Service
  * Handles all email sending functionality
- * Updated with spam prevention improvements and split payment emails
+ * Updated with lead capture notifications
  */
 
 // Send confirmation email to customer
@@ -368,6 +371,167 @@ This is an automated notification from MiddlemanCEO.com
 };
 
 /**
+ * Send Lead Capture Notification to Admin
+ * Sent immediately when someone fills out the landing page form (BEFORE purchase)
+ */
+export const sendLeadCaptureNotification = async (leadData) => {
+  const { name, email, phone, leadId } = leadData;
+
+  const msg = {
+    to: process.env.ADMIN_EMAIL || "SUPPORT@MIDDLEMANCEO.COM",
+    from: {
+      email: process.env.EMAIL_FROM || "SUPPORT@MIDDLEMANCEO.COM",
+      name: 'MiddlemanCEO System',
+    },
+    replyTo: email,
+    subject: `🎯 New Lead: ${name}`,
+    text: `
+NEW LEAD CAPTURED!
+
+LEAD INFORMATION
+----------------
+Lead ID: ${leadId}
+Name: ${name}
+Email: ${email}
+Phone: ${phone}
+Captured: ${new Date().toLocaleString('en-US', { 
+  dateStyle: 'full', 
+  timeStyle: 'short' 
+})}
+
+STATUS
+------
+Lead has viewed the landing page and submitted their contact information.
+They will now proceed to view the Blueprint and select a package.
+
+NEXT STEPS
+----------
+- Monitor if they purchase a package
+- Follow up if they don't complete purchase within 24 hours
+- Add to email marketing list
+- Track their journey through the funnel
+
+This is an automated notification from MiddlemanCEO.com
+    `,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
+          .content { background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; }
+          .info-box { background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #10b981; }
+          .label { font-weight: bold; color: #4b5563; }
+          .value { color: #111827; }
+          .badge { display: inline-block; background: #10b981; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+          a { color: #2563eb; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🎯 New Lead Captured!</h1>
+            <p style="margin: 0; opacity: 0.9;">Someone just filled out the landing page form</p>
+          </div>
+          
+          <div class="content">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <span class="badge">NEW LEAD</span>
+            </div>
+
+            <h2>Lead Information</h2>
+            <div class="info-box">
+              <p><span class="label">Lead ID:</span> <span class="value">${leadId}</span></p>
+              <p><span class="label">Name:</span> <span class="value">${name}</span></p>
+              <p><span class="label">Email:</span> <span class="value"><a href="mailto:${email}">${email}</a></span></p>
+              <p><span class="label">Phone:</span> <span class="value"><a href="tel:${phone}">${phone}</a></span></p>
+              <p><span class="label">Captured:</span> <span class="value">${new Date().toLocaleString('en-US', { 
+                dateStyle: 'full', 
+                timeStyle: 'short' 
+              })}</span></p>
+            </div>
+            
+            <h2>Status</h2>
+            <p>✅ Lead has viewed the landing page and submitted their contact information.</p>
+            <p>⏳ They will now proceed to view the Blueprint and select a package.</p>
+            
+            <h2>Next Steps</h2>
+            <ul style="line-height: 2;">
+              <li>Monitor if they purchase a package</li>
+              <li>Follow up if they don't complete purchase within 24 hours</li>
+              <li>Add to email marketing list for nurture campaign</li>
+              <li>Track their journey through the funnel</li>
+            </ul>
+            
+            <div style="margin-top: 30px; padding: 20px; background: #f3f4f6; border-radius: 8px; text-align: center;">
+              <p style="margin: 0; font-size: 14px; color: #6b7280;">
+                💡 <strong>Pro Tip:</strong> Follow up within 1 hour for best conversion rates
+              </p>
+            </div>
+
+            <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 14px;">
+              This is an automated notification from MiddlemanCEO.com
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    headers: {
+      "X-Priority": "2",
+      "X-MSMail-Priority": "High",
+      Importance: "High",
+    },
+    trackingSettings: {
+      clickTracking: {
+        enable: false,
+      },
+      openTracking: {
+        enable: false,
+      },
+    },
+    categories: ["lead-capture", "admin-notification"],
+  };
+
+  try {
+    const response = await sgMail.send(msg);
+
+    // Log email (use leadId as orderId since order doesn't exist yet)
+    await EmailLog.create({
+      orderId: leadId,
+      recipient: process.env.ADMIN_EMAIL,
+      emailType: "lead-capture",
+      subject: msg.subject,
+      status: "sent",
+      provider: "sendgrid",
+      providerMessageId: response[0].headers["x-message-id"],
+    });
+
+    console.log(`✅ Lead capture notification sent for ${email}`);
+    return { success: true };
+  } catch (error) {
+    console.error("❌ Error sending lead capture notification:", error);
+
+    // Log failed email
+    await EmailLog.create({
+      orderId: leadId,
+      recipient: process.env.ADMIN_EMAIL,
+      emailType: "lead-capture",
+      subject: msg.subject,
+      status: "failed",
+      provider: "sendgrid",
+      errorMessage: error.message,
+    });
+
+    // Don't throw error - we don't want to stop lead creation if email fails
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * Send Second Payment Confirmation
  */
 export const sendSecondPaymentConfirmation = async (orderData, leadData) => {
@@ -581,6 +745,7 @@ MiddlemanCEO Team
 export default {
   sendCustomerConfirmation,
   sendAdminNotification,
+  sendLeadCaptureNotification,
   sendSecondPaymentConfirmation,
   sendSecondPaymentFailed,
 };

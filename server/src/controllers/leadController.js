@@ -1,9 +1,11 @@
 import Lead from '../models/Lead.js';
 import { body, validationResult } from 'express-validator';
+import { sendLeadCaptureNotification } from '../services/emailService.js';
 
 /**
  * Lead Controller
  * Handles lead capture and management
+ * Updated with immediate email notifications
  */
 
 // Validation rules
@@ -45,6 +47,7 @@ export const createLead = async (req, res) => {
 
     // Check if lead already exists
     let lead = await Lead.findOne({ email });
+    let isNewLead = false;
 
     if (lead) {
       // Update existing lead
@@ -65,12 +68,29 @@ export const createLead = async (req, res) => {
         userAgent,
       });
 
+      isNewLead = true;
       console.log(`✅ New lead created: ${email}`);
+
+      // 🎯 SEND IMMEDIATE EMAIL NOTIFICATION TO ADMIN
+      // This happens BEFORE the user selects a package
+      try {
+        await sendLeadCaptureNotification({
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone,
+          leadId: lead._id,
+        });
+        console.log(`📧 Lead capture notification sent to admin for ${email}`);
+      } catch (emailError) {
+        // Log error but don't fail the request
+        console.error('❌ Failed to send lead capture notification:', emailError);
+        // Continue anyway - lead is created, email is secondary
+      }
     }
 
     res.status(201).json({
       success: true,
-      message: 'Lead captured successfully',
+      message: isNewLead ? 'Lead captured successfully' : 'Welcome back! Redirecting to Blueprint...',
       leadId: lead._id,
     });
   } catch (error) {
@@ -145,9 +165,127 @@ export const getAllLeads = async (req, res) => {
   }
 };
 
+// Get Lead Statistics (Admin Dashboard)
+export const getLeadStats = async (req, res) => {
+  try {
+    const total = await Lead.countDocuments();
+    const converted = await Lead.countDocuments({ convertedToCustomer: true });
+    const notConverted = total - converted;
+    const conversionRate = total > 0 ? ((converted / total) * 100).toFixed(2) : 0;
+
+    // Get leads from last 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const recentLeads = await Lead.countDocuments({
+      createdAt: { $gte: sevenDaysAgo },
+    });
+
+    // Get leads from last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const monthlyLeads = await Lead.countDocuments({
+      createdAt: { $gte: thirtyDaysAgo },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        total,
+        converted,
+        notConverted,
+        conversionRate: parseFloat(conversionRate),
+        recentLeads,
+        monthlyLeads,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching lead stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch lead statistics',
+      error: error.message,
+    });
+  }
+};
+
+// Update Lead Status
+export const updateLeadStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { convertedToCustomer, notes } = req.body;
+
+    const lead = await Lead.findById(id);
+
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: 'Lead not found',
+      });
+    }
+
+    // Update fields
+    if (convertedToCustomer !== undefined) {
+      lead.convertedToCustomer = convertedToCustomer;
+    }
+    if (notes !== undefined) {
+      lead.notes = notes;
+    }
+
+    await lead.save();
+
+    console.log(`✅ Lead updated: ${id} - Converted: ${convertedToCustomer}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Lead updated successfully',
+      lead,
+    });
+  } catch (error) {
+    console.error('Error updating lead:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update lead',
+      error: error.message,
+    });
+  }
+};
+
+// Delete Lead (Admin)
+export const deleteLead = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const lead = await Lead.findByIdAndDelete(id);
+
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: 'Lead not found',
+      });
+    }
+
+    console.log(`✅ Lead deleted: ${id}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Lead deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting lead:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete lead',
+      error: error.message,
+    });
+  }
+};
+
 export default {
   validateLead,
   createLead,
   getLeadById,
   getAllLeads,
+  getLeadStats,
+  updateLeadStatus,
+  deleteLead,
 };
