@@ -63,7 +63,14 @@ const CheckoutPage = () => {
   // Get full details
   const industryLabel =
     INDUSTRIES.find((i) => i.value === orderData.industry)?.label || "";
-  const cityLabel = CITIES.find((c) => c.value === orderData.city)?.label || "";
+  // const cityLabel = CITIES.find((c) => c.value === orderData.city)?.label || "";
+  const getCityLabel = () => {
+    if (orderData.city === "Other") {
+      return "Other";
+    }
+    return CITIES.find((c) => c.value === orderData.city)?.label || orderData.city;
+  };
+  const cityLabel = getCityLabel();
   const programData = PROGRAMS.find((p) => p.id === orderData.program);
 
   const appearance = {

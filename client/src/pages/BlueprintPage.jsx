@@ -85,7 +85,6 @@ const BlueprintPage = () => {
             </div>
 
             {/* Video Player */}
-            {/* Video Player */}
             <div className="bg-white rounded-2xl shadow-xl p-4 md:p-6 mb-8">
               <div className="aspect-video rounded-lg overflow-hidden">
                 {/* YouTube Video Embed - Replace VIDEO_ID with your actual video ID */}
@@ -99,27 +98,6 @@ const BlueprintPage = () => {
                   allowFullScreen
                   className="w-full h-full"
                 ></iframe>
-
-                {/* Alternative: Vimeo Embed - Uncomment if using Vimeo */}
-                {/* <iframe
-      src="https://player.vimeo.com/video/YOUR_VIMEO_ID"
-      width="100%"
-      height="100%"
-      frameBorder="0"
-      allow="autoplay; fullscreen; picture-in-picture"
-      allowFullScreen
-      className="w-full h-full"
-    ></iframe> */}
-
-                {/* Alternative: Self-hosted video - Uncomment if using self-hosted */}
-                {/* <video
-      controls
-      className="w-full h-full"
-      poster="/path-to-thumbnail.jpg"
-    >
-      <source src="/path-to-video.mp4" type="video/mp4" />
-      Your browser does not support the video tag.
-    </video> */}
               </div>
             </div>
           </div>
@@ -167,7 +145,7 @@ const BlueprintPage = () => {
                 <select
                   value={selectedCity}
                   onChange={(e) => setSelectedCity(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg..."
                 >
                   <option value="">Select a city...</option>
                   {CITIES.map((city) => (
@@ -175,6 +153,10 @@ const BlueprintPage = () => {
                       {city.label}
                     </option>
                   ))}
+                  {/* ✅ OTHER OPTION ADDED AT THE BOTTOM */}
+                  <option value="Other" style={{ fontStyle: "italic" }}>
+                    Other
+                  </option>
                 </select>
               </div>
 
