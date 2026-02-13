@@ -15,13 +15,15 @@ const TutorialPage = () => {
   const [activePart, setActivePart] = useState(1);
 
   useEffect(() => {
-    // Check if user has purchased (has orderId)
+    // Load order and lead data from sessionStorage
     const orderId = sessionStorage.getItem("orderId");
     const storedOrderData = sessionStorage.getItem("orderData");
     const storedLeadData = sessionStorage.getItem("leadData");
 
-    if (!orderId) {
-      // Redirect to home if no order found
+    // Only redirect if NO data at all (not just missing orderId)
+    // This allows access after successful payment even if orderId isn't set yet
+    if (!storedOrderData && !storedLeadData) {
+      // No payment data found - redirect to home
       navigate("/");
       return;
     }

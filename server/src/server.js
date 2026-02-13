@@ -28,14 +28,11 @@ app.use(cors({
   credentials: true,
 }));
 
-// Body parser (but exclude webhook route for raw body)
-app.use((req, res, next) => {
-  if (req.originalUrl === '/api/payments/webhook') {
-    next();
-  } else {
-    express.json()(req, res, next);
-  }
-});
+// Stripe webhook needs raw body for signature verification
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }));
+
+// Body parser for all other routes
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Rate limiting
