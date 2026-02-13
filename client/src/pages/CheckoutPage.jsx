@@ -1,20 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { loadStripe } from "@stripe/stripe-js";
-import { Elements } from "@stripe/react-stripe-js";
 import Layout from "@/components/layout/Layout";
-import StripePaymentForm from "@/components/forms/StripePaymentForm";
+import Button from "@/components/common/Button";
 import Spinner from "@/components/common/Spinner";
 import { useNavigate } from "react-router-dom";
 import { INDUSTRIES, CITIES, PROGRAMS } from "@/constants";
 import toast from "react-hot-toast";
 
-// Initialize Stripe
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
-
 /**
  * Checkout Page (Page 3)
  * Payment processing page with order summary
- * Fixed: Only creates order and payment intent when user actually pays
+ * Updated: Uses Stripe Payment Links with installment plans
  */
 const CheckoutPage = () => {
   const navigate = useNavigate();
@@ -22,8 +17,9 @@ const CheckoutPage = () => {
   const [leadData, setLeadData] = useState(null);
   const [leadId, setLeadId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
-  // Load data from sessionStorage (but don't create order yet)
+  // Load data from sessionStorage
   useEffect(() => {
     try {
       const storedOrderData = sessionStorage.getItem("orderData");
@@ -50,6 +46,31 @@ const CheckoutPage = () => {
     }
   }, [navigate]);
 
+  // Handle payment - Redirect to Stripe Payment Link
+  const handleProceedToPayment = () => {
+    if (!orderData || !orderData.paymentOptionData || !orderData.paymentOptionData.stripeLink) {
+      toast.error("Payment link not found");
+      return;
+    }
+
+    setIsRedirecting(true);
+
+    // Store metadata for webhook processing
+    const checkoutMetadata = {
+      leadId: leadId,
+      program: orderData.program,
+      programName: orderData.programName,
+      industry: orderData.industry,
+      city: orderData.city,
+      paymentOption: orderData.paymentOption,
+      amount: orderData.paymentOptionData.amount,
+    };
+    sessionStorage.setItem("checkoutMetadata", JSON.stringify(checkoutMetadata));
+
+    // Redirect to Stripe Payment Link
+    window.location.href = orderData.paymentOptionData.stripeLink;
+  };
+
   if (isLoading || !orderData || !leadData) {
     return (
       <Layout>
@@ -72,10 +93,6 @@ const CheckoutPage = () => {
   };
   const cityLabel = getCityLabel();
   const programData = PROGRAMS.find((p) => p.id === orderData.program);
-
-  const appearance = {
-    theme: "stripe",
-  };
 
   return (
     <Layout>
@@ -199,23 +216,40 @@ const CheckoutPage = () => {
                 </div>
               )}
 
-              {/* Payment Form - Updated Component */}
+              {/* Payment Section - Stripe Payment Link */}
               <div className="bg-white rounded-xl shadow-lg p-6">
                 <h2 className="text-xl font-bold text-gray-900 mb-4">
-                  Payment Information
+                  Ready to Complete Your Purchase?
                 </h2>
 
-                {/* Pass all necessary data to payment form */}
-                <Elements stripe={stripePromise} options={{ appearance }}>
-                  <StripePaymentForm
-                    orderData={{
-                      ...orderData,
-                      leadId: leadId,
-                    }}
-                    leadData={leadData}
-                    amount={orderData.paymentOptionData.amount}
-                  />
-                </Elements>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-blue-900">
+                    <strong>🔒 Secure Checkout:</strong> You'll be redirected to Stripe's secure payment page to complete your purchase.
+                  </p>
+                </div>
+
+                <Button
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  onClick={handleProceedToPayment}
+                  disabled={isRedirecting}
+                >
+                  {isRedirecting ? (
+                    <>
+                      <Spinner size="sm" className="mr-2" />
+                      Redirecting to Stripe...
+                    </>
+                  ) : (
+                    <>
+                      🔒 PROCEED TO SECURE CHECKOUT
+                    </>
+                  )}
+                </Button>
+
+                <p className="text-xs text-gray-500 text-center mt-4">
+                  Powered by Stripe • Your payment information is secure and encrypted
+                </p>
               </div>
             </div>
 

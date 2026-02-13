@@ -1,0 +1,10 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="32" cy="32" r="32" fill="#2563EB"/>
+
+  <!-- Letter M -->
+  <text x="32" y="46" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="white" text-anchor="middle">M</text>
+
+  <!-- Small accent dot -->
+  <circle cx="48" cy="16" r="4" fill="#10B981"/>
+</svg>

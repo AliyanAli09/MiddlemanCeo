@@ -246,6 +246,25 @@ export const handleWebhook = async (req, res) => {
 
     // Handle different event types
     switch (event.type) {
+      // Stripe Payment Links events
+      case 'checkout.session.completed':
+        await handleCheckoutSessionCompleted(event.data.object);
+        break;
+
+      case 'checkout.session.async_payment_succeeded':
+        await handleCheckoutSessionCompleted(event.data.object);
+        break;
+
+      // Installment payment events
+      case 'invoice.paid':
+        await handleInvoicePaid(event.data.object);
+        break;
+
+      case 'invoice.payment_failed':
+        await handleInvoicePaymentFailed(event.data.object);
+        break;
+
+      // Legacy Payment Intent events (for backwards compatibility)
       case 'payment_intent.succeeded':
         await handlePaymentIntentSucceeded(event.data.object);
         break;
@@ -270,6 +289,225 @@ export const handleWebhook = async (req, res) => {
       message: 'Webhook error',
       error: error.message,
     });
+  }
+};
+
+// Handle Checkout Session Completed (Stripe Payment Links)
+const handleCheckoutSessionCompleted = async (session) => {
+  try {
+    console.log(`✅ Checkout session completed: ${session.id}`);
+
+    // Extract customer details from session
+    const customerEmail = session.customer_details?.email || session.customer_email;
+    const customerName = session.customer_details?.name;
+
+    // Find lead by email
+    const lead = await Lead.findOne({ email: customerEmail });
+    if (!lead) {
+      console.error(`❌ Lead not found for email: ${customerEmail}`);
+      return;
+    }
+
+    // Extract metadata from session (if available)
+    const metadata = session.metadata || {};
+
+    // Determine payment plan type
+    const isInstallment = session.payment_intent === null && session.subscription !== null;
+    const paymentPlan = isInstallment ? 'split' : 'one-time';
+
+    // Calculate amount (Stripe uses cents)
+    const amountPaid = session.amount_total / 100;
+
+    // Generate unique order ID
+    const orderId = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+
+    // Create order record
+    const order = await Order.create({
+      orderId: orderId,
+      customerId: lead._id,
+      customerName: lead.name,
+      customerEmail: lead.email,
+      customerPhone: lead.phone,
+      industry: metadata.industry || lead.industry || 'Not specified',
+      city: metadata.city || lead.city || 'Not specified',
+      program: metadata.program || 'pro',
+      programName: metadata.programName || 'PRO — DIY',
+      paymentPlan: paymentPlan,
+      amount: amountPaid,
+      currency: session.currency || 'usd',
+      stripePaymentIntentId: session.payment_intent || session.id,
+      stripeCustomerId: session.customer,
+      paymentStatus: paymentPlan === 'one-time' ? 'paid' : 'partially_paid',
+      fulfillmentStatus: paymentPlan === 'one-time' ? 'in-progress' : 'pending',
+      firstPaymentStatus: 'paid',
+      firstPaymentDate: new Date(),
+      firstPaymentAmount: amountPaid,
+      secondPaymentAmount: paymentPlan === 'split' ? amountPaid : null,
+      secondPaymentStatus: paymentPlan === 'split' ? 'pending' : null,
+      tutorialAccessGranted: true,
+    });
+
+    // If installment plan, store subscription ID for tracking second payment
+    if (isInstallment && session.subscription) {
+      order.stripeSubscriptionId = session.subscription;
+
+      // Calculate second payment due date (30 days)
+      const secondPaymentDate = new Date();
+      secondPaymentDate.setDate(secondPaymentDate.getDate() + 30);
+      order.secondPaymentDueDate = secondPaymentDate;
+      order.secondPaymentScheduled = true;
+      order.secondPaymentScheduledDate = new Date();
+
+      await order.save();
+      console.log(`📅 Second payment scheduled for: ${secondPaymentDate.toLocaleDateString()}`);
+    }
+
+    // Mark lead as converted
+    await Lead.findByIdAndUpdate(lead._id, {
+      convertedToCustomer: true,
+    });
+
+    // Send confirmation emails
+    try {
+      await sendCustomerConfirmation(
+        {
+          orderId: order.orderId,
+          programName: order.programName,
+          amount: order.amount,
+          paymentPlan: order.paymentPlan,
+          secondPaymentDueDate: order.secondPaymentDueDate,
+        },
+        {
+          name: lead.name,
+          email: lead.email,
+        }
+      );
+
+      await sendAdminNotification(
+        {
+          orderId: order.orderId,
+          programName: order.programName,
+          amount: order.amount,
+          industry: order.industry,
+          city: order.city,
+          paymentPlan: order.paymentPlan,
+        },
+        {
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone,
+        }
+      );
+
+      order.emailsSent = true;
+      await order.save();
+    } catch (emailError) {
+      console.error('❌ Error sending confirmation emails:', emailError);
+    }
+
+    console.log(`✅ Order created successfully: ${orderId}`);
+  } catch (error) {
+    console.error('❌ Error handling checkout.session.completed:', error);
+  }
+};
+
+// Handle Invoice Paid (Installment Payments)
+const handleInvoicePaid = async (invoice) => {
+  try {
+    console.log(`💰 Invoice paid: ${invoice.id}`);
+
+    // Find order by subscription ID
+    const order = await Order.findOne({
+      stripeSubscriptionId: invoice.subscription,
+    });
+
+    if (!order) {
+      console.log(`Order not found for subscription: ${invoice.subscription}`);
+      return;
+    }
+
+    // Check if this is the second payment (first invoice is initial payment)
+    if (order.secondPaymentStatus === 'pending' && order.firstPaymentStatus === 'paid') {
+      order.paymentStatus = 'paid';
+      order.secondPaymentStatus = 'paid';
+      order.secondPaymentDate = new Date();
+      order.fulfillmentStatus = 'in-progress';
+      await order.save();
+
+      console.log(`✅ Second payment received for order ${order.orderId}`);
+
+      // Send second payment confirmation
+      const lead = await Lead.findById(order.customerId);
+      if (lead) {
+        try {
+          await sendSecondPaymentConfirmation(
+            {
+              orderId: order.orderId,
+              programName: order.programName,
+              amount: order.secondPaymentAmount,
+            },
+            {
+              name: lead.name,
+              email: lead.email,
+            }
+          );
+        } catch (emailError) {
+          console.error('❌ Error sending second payment confirmation:', emailError);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error handling invoice.paid:', error);
+  }
+};
+
+// Handle Invoice Payment Failed (Installment Payment Failed)
+const handleInvoicePaymentFailed = async (invoice) => {
+  try {
+    console.log(`❌ Invoice payment failed: ${invoice.id}`);
+
+    // Find order by subscription ID
+    const order = await Order.findOne({
+      stripeSubscriptionId: invoice.subscription,
+    });
+
+    if (!order) {
+      console.log(`Order not found for subscription: ${invoice.subscription}`);
+      return;
+    }
+
+    // Update second payment status
+    if (order.secondPaymentStatus === 'pending') {
+      order.secondPaymentStatus = 'failed';
+      order.secondPaymentError = invoice.last_payment_error?.message || 'Payment failed';
+      order.secondPaymentRetryCount += 1;
+      await order.save();
+
+      console.log(`❌ Second payment failed for order ${order.orderId}`);
+
+      // Send failure notification
+      const lead = await Lead.findById(order.customerId);
+      if (lead) {
+        try {
+          await sendSecondPaymentFailed(
+            {
+              orderId: order.orderId,
+              programName: order.programName,
+              amount: order.secondPaymentAmount,
+              errorMessage: order.secondPaymentError,
+            },
+            {
+              name: lead.name,
+              email: lead.email,
+            }
+          );
+        } catch (emailError) {
+          console.error('❌ Error sending failure notification:', emailError);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error handling invoice.payment_failed:', error);
   }
 };
 

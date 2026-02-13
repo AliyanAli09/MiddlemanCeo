@@ -38,7 +38,7 @@ const orderSchema = new mongoose.Schema({
   program: {
     type: String,
     required: true,
-    enum: ['basic', 'pro', 'elite'],
+    enum: ['pro', 'elite', 'prime'],
   },
   programName: {
     type: String,
@@ -66,6 +66,9 @@ const orderSchema = new mongoose.Schema({
   },
   stripeCustomerId: {
     type: String,
+  },
+  stripeSubscriptionId: {
+    type: String, // For Stripe installment plans
   },
   
   // Payment Status

@@ -1,15 +1,28 @@
-import sgMail from "@sendgrid/mail";
-import EmailLog from "../models/EmailLog.js";
-import dotenv from "dotenv";
+import nodemailer from 'nodemailer';
+import EmailLog from '../models/EmailLog.js';
+import dotenv from 'dotenv';
 dotenv.config();
 
-// Initialize SendGrid
-sgMail.setApiKey(process.env.SENDGRID_API_KEY );
-
+// Create SMTP transporter
+const createTransporter = () => {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+    // Optional: Add these for better compatibility
+    tls: {
+      rejectUnauthorized: false, // Set to true in production with valid SSL
+    },
+  });
+};
 
 /**
  * Email Service
- * Handles all email sending functionality
+ * Handles all email sending functionality using SMTP
  * Updated with lead capture notifications
  */
 
@@ -27,12 +40,12 @@ export const sendCustomerConfirmation = async (orderData, leadData) => {
       })
     : null;
 
-  const msg = {
-    to: email,
+  const mailOptions = {
     from: {
-      email: process.env.EMAIL_FROM,
-      name: "MiddlemanCEO Team",
+      name: 'MiddlemanCEO Team',
+      address: process.env.EMAIL_FROM,
     },
+    to: email,
     replyTo: process.env.ADMIN_EMAIL,
     subject: `Welcome to MiddlemanCEO! 🎉 Order #${orderId}`,
     text: `
@@ -171,47 +184,35 @@ Terms of Service: ${process.env.FRONTEND_URL}/terms
       </body>
       </html>
     `,
-    headers: {
-      "X-Priority": "3",
-      "X-MSMail-Priority": "Normal",
-      Importance: "Normal",
-    },
-    trackingSettings: {
-      clickTracking: {
-        enable: false,
-      },
-      openTracking: {
-        enable: false,
-      },
-    },
-    categories: ["order-confirmation", "customer-email"],
+    priority: 'normal',
   };
 
   try {
-    const response = await sgMail.send(msg);
+    const transporter = createTransporter();
+    const info = await transporter.sendMail(mailOptions);
 
     await EmailLog.create({
       orderId,
       recipient: email,
-      emailType: "confirmation",
-      subject: msg.subject,
-      status: "sent",
-      provider: "sendgrid",
-      providerMessageId: response[0].headers["x-message-id"],
+      emailType: 'confirmation',
+      subject: mailOptions.subject,
+      status: 'sent',
+      provider: 'smtp',
+      providerMessageId: info.messageId,
     });
 
     console.log(`✅ Confirmation email sent to ${email}`);
-    return { success: true };
+    return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error("❌ Error sending confirmation email:", error);
+    console.error('❌ Error sending confirmation email:', error);
 
     await EmailLog.create({
       orderId,
       recipient: email,
-      emailType: "confirmation",
-      subject: msg.subject,
-      status: "failed",
-      provider: "sendgrid",
+      emailType: 'confirmation',
+      subject: mailOptions.subject,
+      status: 'failed',
+      provider: 'smtp',
       errorMessage: error.message,
     });
 
@@ -224,12 +225,12 @@ export const sendAdminNotification = async (orderData, leadData) => {
   const { orderId, programName, amount, industry, city, paymentPlan } = orderData;
   const { name, email, phone } = leadData;
 
-  const msg = {
-    to: process.env.ADMIN_EMAIL,
+  const mailOptions = {
     from: {
-      email: process.env.EMAIL_FROM,
-      name: "MiddlemanCEO System",
+      name: 'MiddlemanCEO System',
+      address: process.env.EMAIL_FROM,
     },
+    to: process.env.ADMIN_EMAIL,
     replyTo: email,
     subject: `New Order: ${programName} - ${name}`,
     text: `
@@ -322,47 +323,35 @@ This is an automated notification from MiddlemanCEO.com
       </body>
       </html>
     `,
-    headers: {
-      "X-Priority": "2",
-      "X-MSMail-Priority": "High",
-      Importance: "High",
-    },
-    trackingSettings: {
-      clickTracking: {
-        enable: false,
-      },
-      openTracking: {
-        enable: false,
-      },
-    },
-    categories: ["admin-notification", "order-alert"],
+    priority: 'high',
   };
 
   try {
-    const response = await sgMail.send(msg);
+    const transporter = createTransporter();
+    const info = await transporter.sendMail(mailOptions);
 
     await EmailLog.create({
       orderId,
       recipient: process.env.ADMIN_EMAIL,
-      emailType: "notification",
-      subject: msg.subject,
-      status: "sent",
-      provider: "sendgrid",
-      providerMessageId: response[0].headers["x-message-id"],
+      emailType: 'notification',
+      subject: mailOptions.subject,
+      status: 'sent',
+      provider: 'smtp',
+      providerMessageId: info.messageId,
     });
 
     console.log(`✅ Admin notification sent`);
-    return { success: true };
+    return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error("❌ Error sending admin notification:", error);
+    console.error('❌ Error sending admin notification:', error);
 
     await EmailLog.create({
       orderId,
       recipient: process.env.ADMIN_EMAIL,
-      emailType: "notification",
-      subject: msg.subject,
-      status: "failed",
-      provider: "sendgrid",
+      emailType: 'notification',
+      subject: mailOptions.subject,
+      status: 'failed',
+      provider: 'smtp',
       errorMessage: error.message,
     });
 
@@ -377,12 +366,12 @@ This is an automated notification from MiddlemanCEO.com
 export const sendLeadCaptureNotification = async (leadData) => {
   const { name, email, phone, leadId } = leadData;
 
-  const msg = {
-    to: process.env.ADMIN_EMAIL || "SUPPORT@MIDDLEMANCEO.COM",
+  const mailOptions = {
     from: {
-      email: process.env.EMAIL_FROM || "SUPPORT@MIDDLEMANCEO.COM",
       name: 'MiddlemanCEO System',
+      address: process.env.EMAIL_FROM || 'SUPPORT@MIDDLEMANCEO.COM',
     },
+    to: process.env.ADMIN_EMAIL || 'SUPPORT@MIDDLEMANCEO.COM',
     replyTo: email,
     subject: `🎯 New Lead: ${name}`,
     text: `
@@ -480,53 +469,38 @@ This is an automated notification from MiddlemanCEO.com
       </body>
       </html>
     `,
-    headers: {
-      "X-Priority": "2",
-      "X-MSMail-Priority": "High",
-      Importance: "High",
-    },
-    trackingSettings: {
-      clickTracking: {
-        enable: false,
-      },
-      openTracking: {
-        enable: false,
-      },
-    },
-    categories: ["lead-capture", "admin-notification"],
+    priority: 'high',
   };
 
   try {
-    const response = await sgMail.send(msg);
+    const transporter = createTransporter();
+    const info = await transporter.sendMail(mailOptions);
 
-    // Log email (use leadId as orderId since order doesn't exist yet)
     await EmailLog.create({
       orderId: leadId,
       recipient: process.env.ADMIN_EMAIL,
-      emailType: "lead-capture",
-      subject: msg.subject,
-      status: "sent",
-      provider: "sendgrid",
-      providerMessageId: response[0].headers["x-message-id"],
+      emailType: 'lead-capture',
+      subject: mailOptions.subject,
+      status: 'sent',
+      provider: 'smtp',
+      providerMessageId: info.messageId,
     });
 
     console.log(`✅ Lead capture notification sent for ${email}`);
-    return { success: true };
+    return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error("❌ Error sending lead capture notification:", error);
+    console.error('❌ Error sending lead capture notification:', error);
 
-    // Log failed email
     await EmailLog.create({
       orderId: leadId,
       recipient: process.env.ADMIN_EMAIL,
-      emailType: "lead-capture",
-      subject: msg.subject,
-      status: "failed",
-      provider: "sendgrid",
+      emailType: 'lead-capture',
+      subject: mailOptions.subject,
+      status: 'failed',
+      provider: 'smtp',
       errorMessage: error.message,
     });
 
-    // Don't throw error - we don't want to stop lead creation if email fails
     return { success: false, error: error.message };
   }
 };
@@ -538,12 +512,12 @@ export const sendSecondPaymentConfirmation = async (orderData, leadData) => {
   const { orderId, programName, amount } = orderData;
   const { name, email } = leadData;
 
-  const msg = {
-    to: email,
+  const mailOptions = {
     from: {
-      email: process.env.EMAIL_FROM,
       name: 'MiddlemanCEO Team',
+      address: process.env.EMAIL_FROM,
     },
+    to: email,
     replyTo: process.env.ADMIN_EMAIL,
     subject: `Second Payment Received - Order #${orderId} ✅`,
     text: `
@@ -625,13 +599,13 @@ Questions? Contact us at support@middlemanceo.com
       </body>
       </html>
     `,
-    categories: ['second-payment', 'payment-confirmation'],
   };
 
   try {
-    await sgMail.send(msg);
+    const transporter = createTransporter();
+    const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Second payment confirmation sent to ${email}`);
-    return { success: true };
+    return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('❌ Error sending second payment confirmation:', error);
     throw error;
@@ -645,12 +619,12 @@ export const sendSecondPaymentFailed = async (orderData, leadData) => {
   const { orderId, programName, amount, errorMessage } = orderData;
   const { name, email } = leadData;
 
-  const msg = {
-    to: email,
+  const mailOptions = {
     from: {
-      email: process.env.EMAIL_FROM,
       name: 'MiddlemanCEO Team',
+      address: process.env.EMAIL_FROM,
     },
+    to: email,
     replyTo: process.env.ADMIN_EMAIL,
     subject: `Payment Failed - Action Required - Order #${orderId} ⚠️`,
     text: `
@@ -729,16 +703,29 @@ MiddlemanCEO Team
       </body>
       </html>
     `,
-    categories: ['second-payment', 'payment-failed'],
   };
 
   try {
-    await sgMail.send(msg);
+    const transporter = createTransporter();
+    const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Payment failure notification sent to ${email}`);
-    return { success: true };
+    return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('❌ Error sending payment failure notification:', error);
     throw error;
+  }
+};
+
+// Test email connection (optional utility function)
+export const testEmailConnection = async () => {
+  try {
+    const transporter = createTransporter();
+    await transporter.verify();
+    console.log('✅ SMTP connection verified successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ SMTP connection failed:', error);
+    return { success: false, error: error.message };
   }
 };
 
@@ -748,4 +735,5 @@ export default {
   sendLeadCaptureNotification,
   sendSecondPaymentConfirmation,
   sendSecondPaymentFailed,
+  testEmailConnection,
 };
