@@ -11,7 +11,7 @@ export const PROGRAMS = [
         label: 'Pay in full',
         amount: 497,
         display: '$497',
-        stripeLink: 'https://buy.stripe.com/cNibJ18by9Whbxqgee6c002',
+        stripeLink: 'https://square.link/u/OCKNYBcr',
       },
       {
         type: 'split',
@@ -20,7 +20,7 @@ export const PROGRAMS = [
         display: '2 × $250',
         totalAmount: 500,
         installments: 2,
-        stripeLink: 'https://buy.stripe.com/28EdR977ufgBeJCd226c003',
+        stripeLink: 'https://square.link/u/c45Z9OOc',
       },
     ],
     features: [
@@ -47,7 +47,7 @@ export const PROGRAMS = [
         label: 'Pay in full',
         amount: 2500,
         display: '$2,500',
-        stripeLink: 'https://buy.stripe.com/cNi5kD9fCc4p5920fg6c001',
+        stripeLink: 'https://square.link/u/jqC6Knu8',
       },
       {
         type: 'split',
@@ -56,7 +56,7 @@ export const PROGRAMS = [
         display: '2 × $1,250',
         totalAmount: 2500,
         installments: 2,
-        stripeLink: 'https://buy.stripe.com/14A8wPajGd8tdFy7HI6c004',
+        stripeLink: 'https://square.link/u/sB6jAmPa',
       },
     ],
     features: [
@@ -84,7 +84,7 @@ export const PROGRAMS = [
         label: 'Pay in full',
         amount: 10000,
         display: '$10,000',
-        stripeLink: 'https://buy.stripe.com/9B64gzcrO0lH7ha0fg6c008',
+        stripeLink: 'https://square.link/u/7l7Nqy3k',
       },
       {
         type: 'split',
@@ -93,7 +93,7 @@ export const PROGRAMS = [
         display: '2 × $5,000',
         totalAmount: 10000,
         installments: 2,
-        stripeLink: 'https://buy.stripe.com/28EcN577uc4p9pi1jk6c007',
+        stripeLink: 'https://square.link/u/2TBB4PA1',
       },
     ],
     features: [
