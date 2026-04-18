@@ -1,4 +1,5 @@
 export const PROGRAMS = [
+  /* PRO $497 — commented out, not currently offered
   {
     id: 'pro',
     name: 'PRO',
@@ -35,6 +36,7 @@ export const PROGRAMS = [
     clarification: 'No website included • No coaching included',
     popular: false,
   },
+  */
   {
     id: 'elite',
     name: 'ELITE',
@@ -72,6 +74,7 @@ export const PROGRAMS = [
     description: 'Done-For-You — Designed to operate in ~1 hour per week',
     popular: true,
   },
+  /* PRIME $10,000 — commented out, not currently offered
   {
     id: 'prime',
     name: 'PRIME',
@@ -109,6 +112,7 @@ export const PROGRAMS = [
     description: 'Partner / License Model — Full partnership and licensing',
     popular: false,
   },
+  */
 ];
 
 export default PROGRAMS;
